@@ -1,7 +1,43 @@
 import asyncio
 import logging
+import shutil
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+
+def _find_pactl() -> str:
+    """Find pactl executable path.
+
+    Returns:
+        Path to pactl executable
+
+    Raises:
+        RuntimeError: If pactl is not found
+    """
+    # Try common locations
+    paths = [
+        "/usr/bin/pactl",  # Linux default
+        "/opt/homebrew/bin/pactl",  # macOS Homebrew (Apple Silicon)
+        "/usr/local/bin/pactl",  # macOS Homebrew (Intel)
+    ]
+
+    for path in paths:
+        if Path(path).exists():
+            return path
+
+    # Try which command
+    pactl_path = shutil.which("pactl")
+    if pactl_path:
+        return pactl_path
+
+    msg = (
+        "pactl (PulseAudio control utility) not found. Please install PulseAudio:\n"
+        "  macOS: brew install pulseaudio\n"
+        "  Ubuntu/Debian: sudo apt-get install pulseaudio\n"
+        "  Fedora/RHEL: sudo dnf install pulseaudio"
+    )
+    raise RuntimeError(msg)
 
 
 class PulseModuleManager:
@@ -19,7 +55,8 @@ class PulseModuleManager:
         Returns:
             The module id.
         """
-        cmd = ["/usr/bin/pactl", "load-module", *cmd_args]
+        pactl_path = _find_pactl()
+        cmd = [pactl_path, "load-module", *cmd_args]
         load_sink_proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
@@ -46,7 +83,8 @@ class PulseModuleManager:
         Raises:
             RuntimeError: If the module unload fails.
         """
-        cmd = ["/usr/bin/pactl", "unload-module", str(module_id)]
+        pactl_path = _find_pactl()
+        cmd = [pactl_path, "unload-module", str(module_id)]
         unload_sink_proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,

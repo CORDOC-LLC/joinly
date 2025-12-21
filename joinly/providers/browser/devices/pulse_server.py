@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import shutil
 import tempfile
 from pathlib import Path
 from typing import Self
@@ -13,6 +14,40 @@ logger = logging.getLogger(__name__)
 _RUNTIME_ENV_VAR = "PULSE_RUNTIME_PATH"
 _SERVER_ENV_VAR = "PULSE_SERVER"
 _AUTOSPAWN_ENV_VAR = "PULSE_DISABLE_AUTOSPAWN"
+
+
+def _find_pulseaudio() -> str:
+    """Find PulseAudio executable path.
+
+    Returns:
+        Path to pulseaudio executable
+
+    Raises:
+        RuntimeError: If pulseaudio is not found
+    """
+    # Try common locations
+    paths = [
+        "/usr/bin/pulseaudio",  # Linux default
+        "/opt/homebrew/bin/pulseaudio",  # macOS Homebrew (Apple Silicon)
+        "/usr/local/bin/pulseaudio",  # macOS Homebrew (Intel)
+    ]
+
+    for path in paths:
+        if Path(path).exists():
+            return path
+
+    # Try which command
+    pulseaudio_path = shutil.which("pulseaudio")
+    if pulseaudio_path:
+        return pulseaudio_path
+
+    msg = (
+        "PulseAudio not found. Please install it:\n"
+        "  macOS: brew install pulseaudio\n"
+        "  Ubuntu/Debian: sudo apt-get install pulseaudio\n"
+        "  Fedora/RHEL: sudo dnf install pulseaudio"
+    )
+    raise RuntimeError(msg)
 
 
 class PulseServer(PulseModuleManager):
@@ -45,9 +80,10 @@ class PulseServer(PulseModuleManager):
         self._env[_SERVER_ENV_VAR] = f"unix:{self.socket_path}"
         self._env[_AUTOSPAWN_ENV_VAR] = "1"
 
-        logger.debug("Starting PulseAudio server under %s", self._dir.name)
+        pulseaudio_path = _find_pulseaudio()
+        logger.debug("Starting PulseAudio server under %s using %s", self._dir.name, pulseaudio_path)
         self._proc = await asyncio.create_subprocess_exec(
-            "/usr/bin/pulseaudio",
+            pulseaudio_path,
             "--daemonize=no",
             "--exit-idle-time=-1",
             "--file=/dev/null",

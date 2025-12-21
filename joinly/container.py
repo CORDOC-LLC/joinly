@@ -67,50 +67,25 @@ class SessionContainer:
     async def __aenter__(self) -> MeetingSession:
         """Enter the context manager and create a meeting session."""
         try:
-            vad = await self._build(
-                self._settings.vad,
-                "joinly.services.vad",
-                "VAD",
-                self._settings.vad_args,
-            )
-            stt_extra_args = (
-                {
-                    "finalize_silence": max(
-                        0.1,
-                        float(
-                            self._settings.transcription_controller_args.get(
-                                "utterance_tail_seconds",
-                                0.6,
-                            )
-                        )
-                        - 0.225,
-                    )
-                }
-                if _resolve(
-                    self._settings.stt,
-                    base="joinly.services.stt",
-                    suffix="STT",
-                ).__name__
-                == "DeepgramSTT"
-                else {}
-            )
-            stt = await self._build(
-                self._settings.stt,
-                "joinly.services.stt",
-                "STT",
-                stt_extra_args | self._settings.stt_args,
-            )
-            tts = await self._build(
-                self._settings.tts,
-                "joinly.services.tts",
-                "TTS",
-                self._settings.tts_args,
+            # Build Gemini Live service (shared between transcription and speech)
+            from joinly.services.gemini_live import GeminiLiveService
+
+            gemini_service_args = {
+                "model": self._settings.gemini_model,
+                "api_key": self._settings.gemini_api_key,
+                "system_instruction": self._settings.gemini_system_instruction,
+                "temperature": self._settings.gemini_temperature,
+            } | self._settings.gemini_service_args
+
+            gemini_service = await self._stack.enter_async_context(
+                GeminiLiveService(**gemini_service_args)
             )
 
+            # Build meeting provider with Gemini's audio format (16kHz, 16-bit PCM)
             provider_extra_args = (
                 {
-                    "reader_byte_depth": vad.audio_format.byte_depth,
-                    "writer_byte_depth": tts.audio_format.byte_depth,
+                    "reader_byte_depth": 2,  # 16-bit PCM
+                    "writer_byte_depth": 2,  # 16-bit PCM
                 }
                 if _resolve(
                     self._settings.meeting_provider,
@@ -127,25 +102,32 @@ class SessionContainer:
                 provider_extra_args | self._settings.meeting_provider_args,
             )
 
+            # Build controllers with Gemini service
+            transcription_controller_args = {
+                "gemini_service": gemini_service,
+            } | self._settings.transcription_controller_args
+
             transcription_controller = await self._build(
                 self._settings.transcription_controller,
                 "joinly.controllers.transcription",
                 "TranscriptionController",
-                self._settings.transcription_controller_args,
+                transcription_controller_args,
             )
+
+            speech_controller_args = {
+                "gemini_service": gemini_service,
+            } | self._settings.speech_controller_args
+
             speech_controller = await self._build(
                 self._settings.speech_controller,
                 "joinly.controllers.speech",
                 "SpeechController",
-                self._settings.speech_controller_args,
+                speech_controller_args,
             )
 
+            # Wire up dependencies
             transcription_controller.reader = meeting_provider.audio_reader
-            transcription_controller.vad = vad
-            transcription_controller.stt = stt
-
             speech_controller.writer = meeting_provider.audio_writer
-            speech_controller.tts = tts
             speech_controller.no_speech_event = transcription_controller.no_speech_event
 
             meeting_session = MeetingSession(
@@ -160,7 +142,7 @@ class SessionContainer:
 
         return meeting_session
 
-    async def __aexit__(self, *_exc: object) -> None:
+    async def __aexit__(self, *exc: object) -> None:  # noqa: ARG002
         """Exit the context and clean up resources."""
         await self._stack.aclose()
 

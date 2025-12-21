@@ -1,5 +1,4 @@
 import asyncio
-from collections.abc import AsyncIterator
 from typing import Protocol
 
 from joinly.types import (
@@ -7,9 +6,7 @@ from joinly.types import (
     AudioFormat,
     MeetingChatHistory,
     MeetingParticipant,
-    SpeechWindow,
     Transcript,
-    TranscriptSegment,
     VideoSnapshot,
 )
 from joinly.utils.clock import Clock
@@ -69,83 +66,6 @@ class VideoReader(Protocol):
 
         Returns:
             VideoSnapshot: A snapshot of the current video frame.
-        """
-        ...
-
-
-class VAD(Protocol):
-    """Protocol for Voice Activity Detection.
-
-    Defines the interface for detecting speech in audio streams.
-
-    Attributes:
-        audio_format (AudioFormat): The expected format of the audio data for
-            VAD processing.
-    """
-
-    audio_format: AudioFormat
-
-    def stream(self, chunks: AsyncIterator[AudioChunk]) -> AsyncIterator[SpeechWindow]:
-        """Stream voice activity detection results on audio windows.
-
-        Args:
-            chunks: An asynchronous iterator providing audio chunks.
-
-        Returns:
-            AsyncIterator[SpeechWindow]: Stream of audio windows containing speech
-                information.
-        """
-        ...
-
-
-class STT(Protocol):
-    """Protocol for speech-to-text transcription.
-
-    Defines the interface for streaming and finalizing transcriptions.
-
-    Attributes:
-        audio_format (AudioFormat): The format of the audio data expected for
-            transcription.
-    """
-
-    audio_format: AudioFormat
-
-    def stream(
-        self, windows: AsyncIterator[SpeechWindow]
-    ) -> AsyncIterator[TranscriptSegment]:
-        """Transcribe an utterance into text segments.
-
-        If the audio format is not supported, an exception should be raised.
-
-        Args:
-            windows: An asynchronous iterator of audio windows to transcribe.
-
-        Returns:
-            AsyncIterator[TranscriptSegment]: Stream of transcript segments with text
-                and timing.
-        """
-        ...
-
-
-class TTS(Protocol):
-    """Protocol for text-to-speech synthesis.
-
-    Defines the interface for converting text to audio.
-
-    Attributes:
-        audio_format (AudioFormat): The format of the audio data produced by the TTS.
-    """
-
-    audio_format: AudioFormat
-
-    def stream(self, text: str) -> AsyncIterator[bytes]:
-        """Convert text to synthesized speech.
-
-        Args:
-            text: The text to synthesize.
-
-        Returns:
-            AsyncIterator[bytes]: Stream of raw PCM audio data in the specified format.
         """
         ...
 
@@ -239,17 +159,13 @@ class MeetingProvider(Protocol):
 class TranscriptionController(Protocol):
     """Protocol for controlling transcription processes.
 
-    Defines the interface for starting and stopping transcriptions.
+    Defines the interface for starting and stopping transcriptions with Gemini Live.
 
     Attributes:
         reader (AudioReader): The audio reader to use for transcription.
-        vad (VAD): The voice activity detection service to use.
-        stt (STT): The speech-to-text service to use for transcription.
     """
 
     reader: AudioReader
-    vad: VAD
-    stt: STT
 
     @property
     def no_speech_event(self) -> asyncio.Event:
@@ -278,19 +194,17 @@ class TranscriptionController(Protocol):
 
 
 class SpeechController(Protocol):
-    """Protocol for controlling speech output.
+    """Protocol for controlling speech output with Gemini Live.
 
-    Defines the interface for speaking text.
+    Defines the interface for speaking text using Gemini's audio generation.
 
     Attributes:
         writer (AudioWriter): The audio writer to use for output.
-        tts (TTS): The text-to-speech service to use for generating speech.
         no_speech_event (asyncio.Event): An event that is set when no speech is
             detected.
     """
 
     writer: AudioWriter
-    tts: TTS
     no_speech_event: asyncio.Event
 
     async def start(

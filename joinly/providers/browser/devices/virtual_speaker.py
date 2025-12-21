@@ -106,7 +106,12 @@ class VirtualSpeaker(PulseModuleManager, AudioReader):
 
         logger.debug("Setting up FIFO file for reading: %s", self.fifo_path)
         fd = os.open(self.fifo_path, os.O_RDWR | os.O_NONBLOCK)
-        fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, self.pipe_size)
+
+        # F_SETPIPE_SZ is Linux-only, skip on macOS
+        if hasattr(fcntl, 'F_SETPIPE_SZ'):
+            fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, self.pipe_size)
+        else:
+            logger.debug("F_SETPIPE_SZ not available (macOS) - using default pipe size")
 
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)

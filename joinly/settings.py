@@ -5,9 +5,6 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from joinly.core import (
-    STT,
-    TTS,
-    VAD,
     MeetingProvider,
     SpeechController,
     TranscriptionController,
@@ -17,25 +14,25 @@ from joinly.core import (
 class Settings(BaseSettings):
     """Settings for the meeting agent."""
 
-    name: str = Field(default="joinly")
+    name: str = Field(default="Kurt")
     language: str = Field(default="en")
-    device: str = Field(default="cpu")
+
+    # Gemini Live API settings
+    gemini_model: str = Field(default="gemini-2.0-flash-exp")
+    gemini_api_key: str | None = Field(default=None)
+    gemini_temperature: float = Field(default=0.9)
+    gemini_system_instruction: str | None = Field(default=None)
 
     meeting_provider: str | type[MeetingProvider] = Field(default="browser")
-    vad: str | type[VAD] = Field(default="silero")
-    stt: str | type[STT] = Field(default="whisper")
-    tts: str | type[TTS] = Field(default="kokoro")
     transcription_controller: str | type[TranscriptionController] = Field(
-        default="default"
+        default="gemini_live"
     )
-    speech_controller: str | type[SpeechController] = Field(default="default")
+    speech_controller: str | type[SpeechController] = Field(default="gemini_live")
 
     meeting_provider_args: dict[str, Any] = Field(default_factory=dict)
-    vad_args: dict[str, Any] = Field(default_factory=dict)
-    stt_args: dict[str, Any] = Field(default_factory=dict)
-    tts_args: dict[str, Any] = Field(default_factory=dict)
     transcription_controller_args: dict[str, Any] = Field(default_factory=dict)
     speech_controller_args: dict[str, Any] = Field(default_factory=dict)
+    gemini_service_args: dict[str, Any] = Field(default_factory=dict)
 
     model_config = SettingsConfigDict(
         env_prefix="JOINLY_",

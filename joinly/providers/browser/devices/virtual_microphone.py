@@ -112,7 +112,12 @@ class VirtualMicrophone(PulseModuleManager, AudioWriter):
 
         logger.debug("Setting up FIFO file for writing: %s", self.fifo_path)
         fd = os.open(self.fifo_path, os.O_WRONLY)
-        fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, self.pipe_size)
+
+        # F_SETPIPE_SZ is Linux-only, skip on macOS
+        if hasattr(fcntl, 'F_SETPIPE_SZ'):
+            fcntl.fcntl(fd, fcntl.F_SETPIPE_SZ, self.pipe_size)
+        else:
+            logger.debug("F_SETPIPE_SZ not available (macOS) - using default pipe size")
 
         loop = asyncio.get_running_loop()
         transport, protocol = await loop.connect_write_pipe(

@@ -1,11 +1,13 @@
 import asyncio
 import logging
+import platform
 import re
 from typing import Self
 
 logger = logging.getLogger(__name__)
 
 _VNC_PORT_RE = re.compile(r"PORT=(\d+)")
+_IS_MACOS = platform.system() == "Darwin"
 
 
 class VirtualDisplay:
@@ -40,7 +42,13 @@ class VirtualDisplay:
         self._vnc_proc: asyncio.subprocess.Process | None = None
 
     async def __aenter__(self) -> Self:
-        """Start the Xvfb display."""
+        """Start the Xvfb display (or skip on macOS)."""
+        # macOS doesn't need Xvfb - browsers can run headless natively
+        if _IS_MACOS:
+            logger.debug("macOS detected - skipping Xvfb (browsers run headless natively)")
+            self.display_name = "macOS-native"
+            return self
+
         if self._proc is not None:
             msg = "Xvfb already started"
             raise RuntimeError(msg)
@@ -50,9 +58,13 @@ class VirtualDisplay:
         self._env["XDG_SESSION_TYPE"] = "x11"
         self._env.pop("WAYLAND_DISPLAY", None)
 
+        # Find Xvfb executable
+        import shutil
+        xvfb_path = shutil.which("Xvfb") or "/usr/bin/Xvfb"
+
         # fmt: off
         cmd = [
-            "/usr/bin/Xvfb",
+            xvfb_path,
             "-displayfd", "1",
             "-screen", "0", f"{self.size[0]}x{self.size[1]}x{self.depth}",
             "-nolisten", "tcp",
@@ -117,6 +129,10 @@ class VirtualDisplay:
 
     async def __aexit__(self, *_exc: object) -> None:
         """Stop the Xvfb display."""
+        # macOS doesn't use Xvfb
+        if _IS_MACOS:
+            return
+
         if self._proc is None:
             logger.warning("Xvfb is not started, skipping exit")
             return
