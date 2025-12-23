@@ -356,7 +356,10 @@ Always finish your response with the 'finish' tool after using speak_text or sen
             intro_message += "I will interrupt to redirect discussions as needed. "
         intro_message += "Let's get started."
 
-        await joinly_client.call_tool("speak_text", {"text": intro_message})
+        # Skip intro for now - focus on getting transcripts working
+        # await joinly_client.call_tool("send_chat_message", {"message": intro_message})
+
+        logger.info("Kurt is now listening for transcripts. Speak in the meeting to test!")
 
         while True:
             await transcript_event.wait()
@@ -391,11 +394,11 @@ Always finish your response with the 'finish' tool after using speak_text or sen
             current_time = transcript.segments[-1].start
             time_since_last_intervention = current_time - last_intervention_time
 
-            # Kurt's aggressive intervention logic - interrupt frequently to maintain control
+            # Kurt's aggressive intervention logic - respond to every message
             should_check_in = (
-                exchange_count >= 3 or  # Every 3 exchanges (more frequent)
+                exchange_count >= 1 or  # Every exchange (respond to every message)
                 time_since_last_intervention > 60 or  # Or every 60 seconds
-                len(new_messages) >= 4  # Or if there are 4+ messages in this batch (rapid discussion)
+                len(new_messages) >= 1  # Or if there are any new messages
             )
 
             if should_check_in:
